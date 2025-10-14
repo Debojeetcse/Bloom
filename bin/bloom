@@ -1,0 +1,91 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "bundler/setup"
+require "bloom"
+require "thor"
+
+module Bloom
+  class CLI < Thor
+    map %w[--version -v] => :version
+
+    desc "init [PATH]", "Initialize a new Bloom repository"
+    def init(path = ".")
+      repo = Bloom::Repo.new(path)
+      repo.init
+    rescue StandardError => e
+      error "Failed to initialize repository: #{e.message}"
+    end
+
+    desc "add PATH", "Add file contents to the index"
+    def add(*paths)
+      repo = Bloom::Repo.new(Dir.pwd)
+      index = repo.index
+      paths.each do |path|
+        index.add(path)
+      end
+      index.write
+    rescue StandardError => e
+      error "Failed to add files: #{e.message}"
+    end
+
+    desc "commit", "Record changes to the repository"
+    method_option :message, aliases: "-m", type: :string, required: true
+    def commit
+      repo = Bloom::Repo.new(Dir.pwd)
+      commit = repo.create_commit(options[:message])
+      puts "Created commit #{commit.sha1}"
+    rescue StandardError => e
+      error "Failed to commit: #{e.message}"
+    end
+
+    desc "status", "Show the working tree status"
+    def status
+      repo = Bloom::Repo.new(Dir.pwd)
+      status = repo.status
+      puts status.to_s
+    rescue StandardError => e
+      error "Failed to get status: #{e.message}"
+    end
+
+    desc "branch [NAME]", "List or create branches"
+    def branch(name = nil)
+      repo = Bloom::Repo.new(Dir.pwd)
+      if name
+        branch = repo.create_branch(name)
+        puts "Created branch #{branch.name}"
+      else
+        branches = repo.branches
+        branches.each do |branch|
+          prefix = branch.current? ? "* " : "  "
+          puts "#{prefix}#{branch.name}"
+        end
+      end
+    rescue StandardError => e
+      error "Branch operation failed: #{e.message}"
+    end
+
+    desc "checkout BRANCH", "Switch branches or restore working tree files"
+    def checkout(branch_name)
+      repo = Bloom::Repo.new(Dir.pwd)
+      repo.checkout(branch_name)
+      puts "Switched to branch '#{branch_name}'"
+    rescue StandardError => e
+      error "Checkout failed: #{e.message}"
+    end
+
+    desc "version", "Show Bloom version"
+    def version
+      puts "Bloom version #{Bloom::VERSION}"
+    end
+
+    private
+
+    def error(message)
+      puts "Error: #{message}"
+      exit 1
+    end
+  end
+end
+
+Bloom::CLI.start(ARGV)
